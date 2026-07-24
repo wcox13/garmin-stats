@@ -1,0 +1,1 @@
+"""Garmin Connect stats CLI."""
