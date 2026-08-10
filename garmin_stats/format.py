@@ -14,10 +14,15 @@ from rich.text import Text
 
 METERS_PER_MILE = 1609.344
 
-# Shared color scheme.
+# Shared color scheme. Green/magenta rather than green/cyan for the stacked
+# bar: the latter pair is hard to tell apart with deuteranopia.
 PEAK_STYLE = "bold yellow"
 BAR_STYLE = "green"
+CROSS_BAR_STYLE = "magenta"
 DIM_STYLE = "dim"
+
+# Sized so the weekly table (two bars plus six data columns) fits in 80 columns.
+BAR_WIDTH = 14
 
 
 def meters_to_miles(meters: float) -> float:
@@ -76,12 +81,39 @@ def format_runs_table(runs: list[dict[str, Any]]) -> Table | str:
     return table
 
 
-def _bar(value: float, max_value: float, width: int = 22) -> str:
+def _bar(value: float, max_value: float, width: int = BAR_WIDTH) -> str:
     """A proportional bar of block chars scaled to `max_value`."""
     if max_value <= 0 or value <= 0:
         return ""
     filled = max(1, round(value / max_value * width))
     return "█" * filled
+
+
+def _stacked_bar(
+    primary: float, secondary: float, max_value: float, width: int = BAR_WIDTH
+) -> Text:
+    """A two-segment bar whose total length encodes `primary + secondary`.
+
+    The total block count is rounded first and then split between the
+    segments, so the bar's overall length stays faithful to the value it
+    represents (rounding each segment independently lets the length drift). A
+    nonzero segment is floored at one block, borrowed from the larger segment,
+    so a single short cross-training session doesn't vanish.
+    """
+    total_value = primary + secondary
+    if max_value <= 0 or total_value <= 0:
+        return Text("")
+
+    total = max(1, round(total_value / max_value * width))
+    first = round(primary / total_value * total)
+    second = total - first
+
+    if secondary > 0 and second == 0 and first > 1:
+        first, second = first - 1, 1
+    elif primary > 0 and first == 0 and second > 1:
+        first, second = 1, second - 1
+
+    return Text.assemble(("█" * first, BAR_STYLE), ("█" * second, CROSS_BAR_STYLE))
 
 
 def format_weekly_table(buckets: list[Any]) -> Table | str:
@@ -94,13 +126,21 @@ def format_weekly_table(buckets: list[Any]) -> Table | str:
         return "No data."
 
     peak = max((b.miles for b in buckets), default=0.0)
+    peak_minutes = max((b.minutes for b in buckets), default=0.0)
 
     n = len(buckets)
     total_miles = sum(b.miles for b in buckets)
     total_runs = sum(b.runs for b in buckets)
-    caption = (
-        f"{n} completed weeks · {total_miles:.1f} mi · {total_runs} runs\n"
-        f"avg {total_miles / n:.1f} mi/week · {total_runs / n:.1f} runs/week"
+    total_minutes = sum(b.minutes for b in buckets)
+    caption = Text.assemble(
+        f"{n} completed weeks · {total_miles:.1f} mi · {total_runs} runs · "
+        f"{total_minutes / 60:.1f} aerobic hrs\n"
+        f"avg {total_miles / n:.1f} mi/week · {total_runs / n:.1f} runs/week · "
+        f"{total_minutes / n:.0f} aerobic min/week\n",
+        ("█", BAR_STYLE),
+        (" run   ", DIM_STYLE),
+        ("█", CROSS_BAR_STYLE),
+        (" cross-training", DIM_STYLE),
     )
 
     table = Table(box=box.SIMPLE_HEAVY, header_style="bold", caption=caption)
@@ -108,19 +148,36 @@ def format_weekly_table(buckets: list[Any]) -> Table | str:
     table.add_column("Runs", justify="right")
     table.add_column("Miles", justify="right")
     table.add_column("Longest", justify="right")
-    table.add_column("Trend")
+    table.add_column("Mileage")
+    table.add_column("Aerobic", justify="right")
+    table.add_column("Minutes")
 
     for b in buckets:
         is_peak = peak > 0 and b.miles == peak
         miles_style = PEAK_STYLE if is_peak else ""
         bar_style = PEAK_STYLE if is_peak else BAR_STYLE
         longest = f"{b.longest:.1f}" if b.longest > 0 else "–"
+
+        # The peak *minutes* week is marked on the number, not the bar —
+        # recoloring the bar would destroy the run/cross-training split.
+        is_peak_minutes = peak_minutes > 0 and b.minutes == peak_minutes
+        minutes = Text(
+            f"{b.minutes:.0f}" if b.minutes > 0 else "–",
+            style=PEAK_STYLE if is_peak_minutes else "",
+        )
+        # Parenthesize the cross-training share only when it's a share of
+        # something — on a run-free week the fully-magenta bar already says it.
+        if b.cross_minutes > 0 and b.run_minutes > 0:
+            minutes.append(f" ({b.cross_minutes:.0f})", style=DIM_STYLE)
+
         table.add_row(
             b.start.strftime("%b %d"),  # e.g. "Apr 20"
             str(b.runs),
             Text(f"{b.miles:.1f}", style=miles_style),
             Text(longest, style=DIM_STYLE),
             Text(_bar(b.miles, peak), style=bar_style),
+            minutes,
+            _stacked_bar(b.run_minutes, b.cross_minutes, peak_minutes),
         )
     return table
 

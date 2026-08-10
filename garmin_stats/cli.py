@@ -15,6 +15,7 @@ from rich.console import Console
 
 from garmin_stats.activities import (
     get_activity_laps,
+    get_aerobic_since,
     get_recent_runs,
     get_runs_since,
 )
@@ -24,7 +25,7 @@ from garmin_stats.format import (
     format_weekly_table,
     format_workouts_table,
 )
-from garmin_stats.stats import build_workout, weekly_mileage, window_starts
+from garmin_stats.stats import build_workout, weekly_summary, window_starts
 
 console = Console()
 
@@ -35,10 +36,12 @@ def _cmd_runs(client, args) -> None:
 
 
 def _cmd_weekly(client, args) -> None:
-    # Fetch from the Monday that starts the oldest week in the window.
+    # Fetch from the Monday that starts the oldest week in the window. Runs and
+    # cross-training come back together, so one request feeds both the mileage
+    # and the aerobic-minutes columns.
     oldest_monday = window_starts(args.weeks, date.today())[0]
-    runs = get_runs_since(client, oldest_monday)
-    buckets = weekly_mileage(runs, weeks=args.weeks)
+    activities = get_aerobic_since(client, oldest_monday)
+    buckets = weekly_summary(activities, weeks=args.weeks)
     console.print(format_weekly_table(buckets))
 
 
