@@ -30,6 +30,7 @@ class WeekBucket:
     longest: float = 0.0  # longest single run that week, in miles
     run_minutes: float = 0.0
     cross_minutes: float = 0.0  # cross-training (cardio) minutes
+    partial: bool = False  # the in-progress week, still accumulating
 
     @property
     def minutes(self) -> float:
@@ -87,23 +88,36 @@ def week_start(d: date) -> date:
     return d - timedelta(days=d.weekday())
 
 
-def window_starts(weeks: int, today: date) -> list[date]:
+def window_starts(
+    weeks: int, today: date, include_current: bool = False
+) -> list[date]:
     """Monday start-dates for the last `weeks` *completed* weeks, oldest first.
 
-    The week containing `today` is partial, so it is excluded; the newest
-    bucket is the most recent fully-finished week.
+    The week containing `today` is partial, so it is not one of the `weeks`;
+    with `include_current` it is appended as an extra, final start-date. Either
+    way `weeks` counts finished weeks, so the flag never shifts the window back
+    in time.
     """
-    newest = week_start(today) - timedelta(weeks=1)
-    return [newest - timedelta(weeks=i) for i in range(weeks - 1, -1, -1)]
+    current = week_start(today)
+    newest = current - timedelta(weeks=1)
+    starts = [newest - timedelta(weeks=i) for i in range(weeks - 1, -1, -1)]
+    if include_current:
+        starts.append(current)
+    return starts
 
 
 def weekly_summary(
-    activities: list[dict[str, Any]], weeks: int = 12, today: date | None = None
+    activities: list[dict[str, Any]],
+    weeks: int = 12,
+    today: date | None = None,
+    include_current: bool = False,
 ) -> list[WeekBucket]:
     """Bucket aerobic activity into the last `weeks` completed weeks, oldest first.
 
-    Weeks are Monday-aligned. The current (partial) week is excluded, as are
-    activities outside the window.
+    Weeks are Monday-aligned. With `include_current`, the in-progress week is
+    appended as an extra bucket flagged `partial` — it holds however much of
+    the week has happened so far, so callers should keep it out of totals and
+    averages. Activities outside the window are ignored.
 
     Distance columns (miles, runs, longest) count *runs only*, so they keep
     meaning what they always meant; minutes accumulate from runs and
@@ -113,8 +127,12 @@ def weekly_summary(
     if today is None:
         today = date.today()
 
-    starts = window_starts(weeks, today)
-    buckets = {s: WeekBucket(start=s, miles=0.0, runs=0) for s in starts}
+    starts = window_starts(weeks, today, include_current)
+    current = week_start(today)
+    buckets = {
+        s: WeekBucket(start=s, miles=0.0, runs=0, partial=(s == current))
+        for s in starts
+    }
     oldest, newest = starts[0], starts[-1]
 
     for activity in activities:

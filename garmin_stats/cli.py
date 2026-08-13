@@ -39,9 +39,9 @@ def _cmd_weekly(client, args) -> None:
     # Fetch from the Monday that starts the oldest week in the window. Runs and
     # cross-training come back together, so one request feeds both the mileage
     # and the aerobic-minutes columns.
-    oldest_monday = window_starts(args.weeks, date.today())[0]
+    oldest_monday = window_starts(args.weeks, date.today(), args.current)[0]
     activities = get_aerobic_since(client, oldest_monday)
-    buckets = weekly_summary(activities, weeks=args.weeks)
+    buckets = weekly_summary(activities, weeks=args.weeks, include_current=args.current)
     console.print(format_weekly_table(buckets))
 
 
@@ -79,9 +79,13 @@ def _build_parser() -> argparse.ArgumentParser:
     p_weekly = sub.add_parser("weekly", help="Weekly running mileage totals.")
     p_weekly.add_argument(
         "-w", "--weeks", type=int, default=12,
-        help="Number of weeks to summarize (default: 12).",
+        help="Number of completed weeks to summarize (default: 12).",
     )
-    p_weekly.set_defaults(func=_cmd_weekly)
+    p_weekly.add_argument(
+        "--no-current", dest="current", action="store_false",
+        help="Omit the in-progress week (shown by default).",
+    )
+    p_weekly.set_defaults(func=_cmd_weekly, current=True)
 
     p_workouts = sub.add_parser(
         "workouts", help="List interval workouts (runs with fast laps)."

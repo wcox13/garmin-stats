@@ -18,6 +18,7 @@ python -m garmin_stats.cli                    # last 5 runs (default)
 python -m garmin_stats.cli runs --count 10    # last 10 runs
 python -m garmin_stats.cli weekly             # weekly mileage, last 12 weeks
 python -m garmin_stats.cli weekly --weeks 8   # weekly mileage, last 8 weeks
+python -m garmin_stats.cli weekly --no-current # drop the in-progress week
 python -m garmin_stats.cli workouts           # interval workouts, last 12 weeks
 python -m garmin_stats.cli workouts --weeks 6 # interval workouts, last 6 weeks
 ```
@@ -43,8 +44,12 @@ running, magenta for cross-training. Minutes come from each activity's elapsed
 `duration` rather than moving time, since indoor cardio reports a moving
 duration of zero.
 
-Weeks are Monday-aligned and only *completed* weeks are shown — the current,
-partial week is excluded, so the last row is the most recently finished week.
+Weeks are Monday-aligned. `--weeks` counts *completed* weeks; the in-progress
+week is appended on top of those as a final row marked `*`. Because a partial
+week isn't comparable to a finished one, it stays out of the caption averages
+and the peak highlighting — it only shares the bar scale, so its bar reads
+against the same axis as the rest. Pass `--no-current` to leave it out entirely.
+
 The peak mileage week is highlighted on its bar; the peak aerobic week is
 highlighted on its number, so the bar keeps its run/cross-training coloring.
 
@@ -69,9 +74,10 @@ Date        Name              Distance  Pace
   Jun 29       5    19.9       5.3   ██████████████        187  ██████████████
   Jul 06       5    20.2       5.1   ██████████████        190  ██████████████
   Aug 03       0     0.0         –                          121  ████████████
+  Aug 10*      3    11.4       5.0   ████████               108  ███████
 
-             4 completed weeks · 60.0 mi · 15 runs · 11.4 aerobic hrs
-            avg 15.0 mi/week · 3.8 runs/week · 171 aerobic min/week
+                        avg over 4 completed weeks
+            15.0 mi/week · 3.8 runs/week · 171 aerobic min/week
                             █ run   █ cross-training
 ```
 

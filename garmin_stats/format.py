@@ -120,23 +120,36 @@ def format_weekly_table(buckets: list[Any]) -> Table | str:
     """Build a rich table of weekly-mileage buckets (see stats.WeekBucket).
 
     Reads attributes by duck-typing to avoid a circular import with stats.
-    Highlights the peak week and draws a colored bar per week.
+    Highlights the peak week and draws a colored bar per week. A bucket flagged
+    `partial` (the in-progress week) is marked with `*` and left out of the
+    averages and peak highlighting, since it isn't comparable to the finished
+    weeks around it.
     """
     if not buckets:
         return "No data."
 
-    peak = max((b.miles for b in buckets), default=0.0)
-    peak_minutes = max((b.minutes for b in buckets), default=0.0)
+    done = [b for b in buckets if not b.partial]
 
-    n = len(buckets)
-    total_miles = sum(b.miles for b in buckets)
-    total_runs = sum(b.runs for b in buckets)
-    total_minutes = sum(b.minutes for b in buckets)
+    # Highlight peaks among completed weeks only, but scale the bars to every
+    # week drawn — otherwise a big partial week overruns the bar width.
+    peak = max((b.miles for b in done), default=0.0)
+    peak_minutes = max((b.minutes for b in done), default=0.0)
+    scale_miles = max((b.miles for b in buckets), default=0.0)
+    scale_minutes = max((b.minutes for b in buckets), default=0.0)
+
+    n = len(done)
+    if n:
+        summary = (
+            f"avg over {n} completed weeks\n"
+            f"{sum(b.miles for b in done) / n:.1f} mi/week · "
+            f"{sum(b.runs for b in done) / n:.1f} runs/week · "
+            f"{sum(b.minutes for b in done) / n:.0f} aerobic min/week\n"
+        )
+    else:
+        summary = "no completed weeks in range\n"
+
     caption = Text.assemble(
-        f"{n} completed weeks · {total_miles:.1f} mi · {total_runs} runs · "
-        f"{total_minutes / 60:.1f} aerobic hrs\n"
-        f"avg {total_miles / n:.1f} mi/week · {total_runs / n:.1f} runs/week · "
-        f"{total_minutes / n:.0f} aerobic min/week\n",
+        summary,
         ("█", BAR_STYLE),
         (" run   ", DIM_STYLE),
         ("█", CROSS_BAR_STYLE),
@@ -153,14 +166,16 @@ def format_weekly_table(buckets: list[Any]) -> Table | str:
     table.add_column("Minutes")
 
     for b in buckets:
-        is_peak = peak > 0 and b.miles == peak
+        is_peak = not b.partial and peak > 0 and b.miles == peak
         miles_style = PEAK_STYLE if is_peak else ""
         bar_style = PEAK_STYLE if is_peak else BAR_STYLE
         longest = f"{b.longest:.1f}" if b.longest > 0 else "–"
 
         # The peak *minutes* week is marked on the number, not the bar —
         # recoloring the bar would destroy the run/cross-training split.
-        is_peak_minutes = peak_minutes > 0 and b.minutes == peak_minutes
+        is_peak_minutes = (
+            not b.partial and peak_minutes > 0 and b.minutes == peak_minutes
+        )
         minutes = Text(
             f"{b.minutes:.0f}" if b.minutes > 0 else "–",
             style=PEAK_STYLE if is_peak_minutes else "",
@@ -170,14 +185,18 @@ def format_weekly_table(buckets: list[Any]) -> Table | str:
         if b.cross_minutes > 0 and b.run_minutes > 0:
             minutes.append(f" ({b.cross_minutes:.0f})", style=DIM_STYLE)
 
+        week_of = Text(b.start.strftime("%b %d"))  # e.g. "Apr 20"
+        if b.partial:
+            week_of.append("*", style=DIM_STYLE)
+
         table.add_row(
-            b.start.strftime("%b %d"),  # e.g. "Apr 20"
+            week_of,
             str(b.runs),
             Text(f"{b.miles:.1f}", style=miles_style),
             Text(longest, style=DIM_STYLE),
-            Text(_bar(b.miles, peak), style=bar_style),
+            Text(_bar(b.miles, scale_miles), style=bar_style),
             minutes,
-            _stacked_bar(b.run_minutes, b.cross_minutes, peak_minutes),
+            _stacked_bar(b.run_minutes, b.cross_minutes, scale_minutes),
         )
     return table
 
