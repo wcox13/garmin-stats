@@ -32,7 +32,7 @@ def get_activities_since(
     `get_activities_by_date` paginates the full window for us; filtering
     client-side keeps every subtype (trail, treadmill, track) in play.
     """
-    activities = client.get_activities_by_date(start.isoformat())
+    activities = client.get_activities_by_date(start.isoformat(), date.today().isoformat())
     return [a for a in activities if predicate(a)]
 
 

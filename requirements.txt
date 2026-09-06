@@ -1,2 +1,3 @@
-garminconnect
+garminconnect==0.2.8
 rich
+urllib3<2

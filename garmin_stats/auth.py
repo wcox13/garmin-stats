@@ -38,12 +38,11 @@ def _interactive_login() -> Garmin:
     email = input("Garmin email: ").strip()
     password = getpass.getpass("Garmin password: ")
 
-    client = Garmin(
-        email=email,
-        password=password,
-        prompt_mfa=lambda: input("MFA code: ").strip(),
-    )
-    # Passing the tokenstore path makes login() persist tokens after a
-    # successful credential login.
-    client.login(TOKENSTORE)
+    client = Garmin(email=email, password=password)
+    # No tokenstore arg: does a fresh credential login (prompting for an
+    # MFA code via input() if needed) instead of trying to resume tokens.
+    client.login()
+    # Fresh credential logins aren't persisted automatically, so dump the
+    # tokens ourselves for next time.
+    client.garth.dump(TOKENSTORE)
     return client
